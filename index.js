@@ -186,7 +186,7 @@ function cast(){
 	var sellButton = document.createElement("button")
 	
 	var name = document.createElement("input")
-	name.style = "text-align: center; width: 100px"
+	name.style = "text-align: center; width: 50%"
 
 	canvas.innerHTML = ""
 	keepButton.innerText = "Keep"
