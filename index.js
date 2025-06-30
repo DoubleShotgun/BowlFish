@@ -1,11 +1,27 @@
-//TODO: each fish have status to make points or likely to breed
-//      Feed fish
+//TODO: each fish have status likely to breed
 //      Online stuff (leaderboard, visting fishes)
-//      Earn offine
+//      Fish Breeding
+//      Fish Rarity
+//      Max Fish
+//      Discord game status
 
 Number.prototype.mod = function (n) {
   return ((this % n) + n) % n
 }
+
+var refresh = true
+
+var fishSprite=[
+	["  ‚ ",
+	 ">(<)",
+	 "  ’ "],
+	["\\   ",
+	 " >_̅>",
+	 "/   "],
+	["   ,   ",
+	 "><))(_̅>",
+	 "   ’   "]
+]
 
 function defaultGame(){
 	return {
@@ -41,26 +57,11 @@ function setFishInterval(fish){
 	},fish.rate)
 }
 
-function save(){
-	game.lastTime = Date.now()
-	localStorage.setItem("game",JSON.stringify(game))
-}
-
-function pointSet(value){
-	game.points = value
-	if (isNaN(game.points)){
-		console.log("Money is NaN, resetting to 0")
-		game.points = 0
-	}
-	if (game.points === null){
-		console.log("Money is null, resetting to 0")
-		game.points = 0
-	}
-	document.getElementById("status").innerText = "$"+game.points.toFixed(2)
-}
-
 function earnOffine(){
+	// var dt = 220*1000
 	var dt = Date.now()-game.lastTime
+
+	// if ()
 		
 	game.fishes.forEach(function(fish,i){
 		var earning = Math.floor((dt/fish.rate),dt)*fish.value
@@ -94,6 +95,24 @@ pointSet(game.points)
 
 var shop = game.shop
 
+function save(){
+	game.lastTime = Date.now()
+	localStorage.setItem("game",JSON.stringify(game))
+}
+
+function pointSet(value){
+	game.points = value
+	if (isNaN(game.points)){
+		console.log("Money is NaN, resetting to 0")
+		game.points = 0
+	}
+	if (game.points === null){
+		console.log("Money is null, resetting to 0")
+		game.points = 0
+	}
+	document.getElementById("status").innerText = "$"+game.points.toFixed(2)
+}
+
 setInterval(function(){
 	
 	if(game.bait<20) game.baitTimer--
@@ -107,22 +126,6 @@ setInterval(function(){
 	if (refresh)
 		document.getElementById(currTab).click()
 },1000)
-
-var fishSprite=[
-	["  ‚ ",
-	 ">(<)",
-	 "  ’ "],
-	["\\   ",
-	 " >_̅>",
-	 "/   "],
-	["   ,   ",
-	 "><))(_̅>",
-	 "   ’   "]
-]
-
-
-
-var refresh = true
 
 function normalRandom(min,max,skew=1) {
   let u = 0, v = 0;
@@ -147,8 +150,20 @@ function addFish(fish){
 	game.fishes.push(fish)
 }
 
+function formatTime(time,point){
+	time = time/1000
+	var str = ""
+	if (time>60){
+		str += String((time/60).toFixed(point))+" minute"
+	}else{
+		str += String(time.toFixed(point))+ " second"
+	}
+	if (time!=1)str += "s"
+	return str
+}
+
 function stringFish(fish){
-	return "$"+fish.value.toFixed(2)+" every "+(fish.rate/1000).toFixed(2)+" seconds"
+	return "$"+fish.value.toFixed(2)+" every "+formatTime(fish.rate,2)
 }
 
 function randomFish(value,rate){
@@ -162,11 +177,10 @@ function randomFish(value,rate){
 		"rate":r,
 	}
 }
-var currFish = null
 function cast(){
 	//FIXME: reloading reset this
-	if (currFish===null)
-		currFish = randomFish(game.fishValue,game.fishRate)
+	if (game.castFish===undefined)
+		game.castFish = randomFish(game.fishValue,game.fishRate)
 		
 	var keepButton = document.createElement("button")
 	var sellButton = document.createElement("button")
@@ -179,29 +193,29 @@ function cast(){
 	keepButton.onclick = function(){
 		game.bait -= 1
 		if (name.value.length!=0)
-			currFish.name = name.value
-		addFish(currFish)
+			game.castFish.name = name.value
+		addFish(game.castFish)
 		document.getElementById("cast").click()
 		refresh = true
-		currFish = null
+		game.castFish = undefined
 	}
 	
 	sellButton.innerText = "Sell"
 	sellButton.onclick = function(){
 		game.bait -= 1
-		pointSet(game.points+currFish.value)
+		pointSet(game.points+game.castFish.value)
 		document.getElementById("cast").click()
 		refresh = true
-		currFish = null
+		game.castFish = undefined
 	}
 	
 	var c = document.createElement("center")
-	name.value = currFish.name
-	name.placeholder = currFish.name
+	name.value = game.castFish.name
+	name.placeholder = game.castFish.name
 	c.append(
 		name,"\n\n",
-		fishSprite[currFish.spriteIndex].join("\n")+"\n\n"+
-		stringFish(currFish)+"\n\n",
+		fishSprite[game.castFish.spriteIndex].join("\n")+"\n\n"+
+		stringFish(game.castFish)+"\n\n",
 		keepButton,sellButton
 	)
 	canvas.append(c)
@@ -298,6 +312,8 @@ document.getElementById("fishes").onclick = function(){
 	canvas.innerHTML = ""
 
 	refresh = false
+
+	var padding = ""
 	
 	game.fishes.forEach(function(fish,i){
 		canvas.innerHTML += fishSprite[fish.spriteIndex][0]
@@ -375,7 +391,7 @@ document.getElementById("cast").onclick = function(){
 	c.innerHTML += `${game.bait} of 20 baits\n`
 	if(game.bait<20) {
 		c.innerHTML += `\nMore bait:\n`
-		c.innerHTML += `${game.baitTimer} seconds\n`
+		c.innerHTML += `${formatTime(game.baitTimer*1000,0)}\n`
 	}
 	var temp = ""
 	if(game.bait==0) temp=" disabled"
