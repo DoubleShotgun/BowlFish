@@ -2,8 +2,8 @@
 //      Online stuff (leaderboard, visting fishes)
 //      Fish Breeding
 //      Fish Rarity
-//      Max Fish
 //      Discord game status
+//      Icon
 
 Number.prototype.mod = function (n) {
   return ((this % n) + n) % n
@@ -11,6 +11,7 @@ Number.prototype.mod = function (n) {
 
 var refresh = true
 
+//FIXME: broken utf8 combining
 var fishSprite=[
 	["  ‚ ",
 	 ">(<)",
@@ -23,32 +24,61 @@ var fishSprite=[
 	 "   ’   "]
 ]
 
+var defaultShop = 
+[{
+	name:"Caught Fish Value",
+	cost:1,
+	costInc :1,
+	value:"fishValue",
+	valueInc:1
+},
+{
+	name:"Caught Fish Rate",
+	cost:10,
+	costInc:5,
+	value:"fishRate",
+	valueInc:-5000,
+	valueIncMax:-500,
+	valueIncMul:0.96,
+},
+{
+	name:"Max Fish Capacity",
+	cost:250,
+	costMul:250,
+	value:"fishMax",
+	valueList:[6,9,12,15,18,20]
+}]
+
 function defaultGame(){
 	return {
 		points:0,
 		fishes:[],
 		bait:20,
 		baitTimer:300,
-		fishValue:0.5,
-		fishRate: 1.8e+6,
+		fishValue:1,
+		fishMax:3,
+		fishRate: 3.6e+6,
 		lastTime: Date.now(),
-		shop:[
-			{
-				name:"Caught Fish Value",
-				cost:1,
-				value:"fishValue",
-				valueInc:0.5,
-				costInc :1
-			},
-			{
-				name:"Caught Fish Rate",
-				cost:10,
-				value:"fishRate",
-				valueInc:-5000,
-				costInc :5
-			}
-		]
+		shop:defaultShop
 	}
+}
+
+function checkGame(){
+	var dg = defaultGame()
+	for (var [k, v] of Object.entries(dg)){
+		if (game[k]!==undefined) continue
+		console.log(`Game value "${k}" doesnt an exist, adding it with default value`)
+		game[k] = v
+	}
+}
+function checkShop(){
+	if (game.shop.length===defaultShop.length) return
+	
+	defaultShop.forEach(function(item,i){
+		if (typeof game.shop[i]=="object") return
+		console.log(`Item "${item.name}" doesnt an exist, adding it with default value`)
+		game.shop[i] = item
+	})
 }
 	
 function setFishInterval(fish){
@@ -58,17 +88,21 @@ function setFishInterval(fish){
 }
 
 function earnOffine(){
-	// var dt = 220*1000
 	var dt = Date.now()-game.lastTime
+	// dt = 1000*3600*8
 
-	// if ()
-		
+	var t=0
 	game.fishes.forEach(function(fish,i){
-		var earning = Math.floor((dt/fish.rate),dt)*fish.value
+		if(fish.rate===0)
+			var earning = Math.floor((dt/40),dt)*fish.value
+		else
+			var earning = Math.floor((dt/fish.rate),dt)*fish.value
+		t+=earning
 		pointSet(game.points+earning)
-		console.log(`${fish.name}: $${earning}, ${dt}`)
+		console.log(`${fish.name}: ${formatMoney(earning)}, ${dt}`)
 		setFishInterval(fish)
 	})
+	console.log(`Total: ${formatMoney(t)}`)
 
 	if (game.bait>=20) return
 
@@ -84,9 +118,10 @@ function earnOffine(){
 }
 
 var game = localStorage.getItem("game")
-
 if (game){
 	game = JSON.parse(game)
+	checkGame()
+	checkShop()
 	earnOffine()
 }else{
 	game = defaultGame()
@@ -97,20 +132,64 @@ var shop = game.shop
 
 function save(){
 	game.lastTime = Date.now()
+	if (game.points===Infinity)
+		game.points = "Infinity"
+		
 	localStorage.setItem("game",JSON.stringify(game))
+	
+	if (game.points==="Infinity")
+		game.points = Infinity
+}
+
+function countNumber(number){
+	return Math.floor(Math.log10(Math.abs(number))) + 1
+}
+
+function formatMoney(money){
+	if (money==Infinity) return "$Infinity"
+	var str = "$"
+	if (money>=1000){
+		suffixes = [
+			"K",
+			"M",
+			"B",
+			"T",
+			"Qa",
+			"Qi",
+			"Sx",
+			"Sp",
+			"Oc",
+			"No",
+			"De"
+		]
+		var digits = countNumber(money)
+		var sf = suffixes[Math.floor((digits-1)/3)-1]
+		if(sf===undefined)
+			str += String(money.toExponential(2))
+		else
+			str += (money/Math.pow(10,Math.floor((digits-1)/3)*3)).toFixed(2)+sf
+	}else{
+		str += money.toFixed(2)
+	}
+	return str
+}
+
+function fishesAtCapacity(){
+	return game.fishes.length>=game.fishMax
 }
 
 function pointSet(value){
 	game.points = value
-	if (isNaN(game.points)){
+	if (game.points === "Infinity"){
+		game.points = Infinity
+	}else if (isNaN(game.points)){
 		console.log("Money is NaN, resetting to 0")
 		game.points = 0
-	}
-	if (game.points === null){
+	}else if (game.points === null){
 		console.log("Money is null, resetting to 0")
 		game.points = 0
 	}
-	document.getElementById("status").innerText = "$"+game.points.toFixed(2)
+	document.getElementById("status").innerText = formatMoney(game.points)
 }
 
 setInterval(function(){
@@ -153,32 +232,43 @@ function addFish(fish){
 function formatTime(time,point){
 	time = time/1000
 	var str = ""
-	if (time>60){
+	if (time>3600)
+		str += String((time/3600).toFixed(point))+" hour"
+	else if (time>60)
 		str += String((time/60).toFixed(point))+" minute"
-	}else{
+	else
 		str += String(time.toFixed(point))+ " second"
-	}
+	
 	if (time!=1)str += "s"
 	return str
 }
 
 function stringFish(fish){
-	return "$"+fish.value.toFixed(2)+" every "+formatTime(fish.rate,2)
+	if(fish.rate.toFixed(2)==0)
+		var rate = "frame"
+	else
+		var rate = formatTime(fish.rate,2)
+	return formatMoney(fish.value)+" every "+rate
 }
 
 function randomFish(value,rate){
-	var r = (normalRandom(rate/1.05,rate*1.05))
-	if (r<1) r=0.1
+	if (value===undefined){
+		 var r = 0	
+		 var v = 0	
+	}else{
+		var r = (normalRandom(rate-900*1000,rate+900*1000))
+		var v = Number(normalRandom(value/2,value*2).toFixed(2))
+		if (r<0) r=0
+	}
 	
 	return {
 		"name":window.names[Math.floor(Math.random()*window.names.length)],
 		"spriteIndex":parseInt(Math.random()*3),
-		"value":Number(normalRandom(value/2,value*2).toFixed(2)),
+		"value":v,
 		"rate":r,
 	}
 }
 function cast(){
-	//FIXME: reloading reset this
 	if (game.castFish===undefined)
 		game.castFish = randomFish(game.fishValue,game.fishRate)
 		
@@ -190,6 +280,8 @@ function cast(){
 
 	canvas.innerHTML = ""
 	keepButton.innerText = "Keep"
+	if (fishesAtCapacity())
+		keepButton.disabled = true
 	keepButton.onclick = function(){
 		game.bait -= 1
 		if (name.value.length!=0)
@@ -268,7 +360,7 @@ Add Fish:
 		}
 		
 		var debugAddFishText = document.getElementById("debug-add-fish-text")
-		debugAddFishText.value = JSON.stringify(randomFish(1,1000),null,2)
+		debugAddFishText.value = JSON.stringify(randomFish(),null,2)
 		var debugAddFishButton = document.getElementById("debug-add-fish-button")
 		debugAddFishButton.onclick = function(){
 			var fish = JSON.parse(debugAddFishText.value)
@@ -309,23 +401,26 @@ function sellFish(i){
 }
 
 document.getElementById("fishes").onclick = function(){
-	canvas.innerHTML = ""
+	canvas.innerHTML = `Fishes: ${game.fishes.length}/${game.fishMax}\n<hr>`
 
 	refresh = false
 
-	var padding = ""
 	
 	game.fishes.forEach(function(fish,i){
-		canvas.innerHTML += fishSprite[fish.spriteIndex][0]
+		var padding = "   "
+		if (fish.spriteIndex==2)
+			padding=""
+			
+		canvas.innerHTML += fishSprite[fish.spriteIndex][0]+padding
 			
 		canvas.innerHTML += '<span id="fish-name'+i+'">'+fish.name+"</span>"
 		canvas.innerHTML += "\n"
 		
-		canvas.innerHTML += fishSprite[fish.spriteIndex][1]+"  "
+		canvas.innerHTML += fishSprite[fish.spriteIndex][1]+"  "+padding
 		canvas.innerHTML += stringFish(fish)
 		
 		canvas.innerHTML += "\n"
-		canvas.innerHTML += fishSprite[fish.spriteIndex][2]+"  "
+		canvas.innerHTML += fishSprite[fish.spriteIndex][2]+"  "+padding
 		canvas.innerHTML += '<button class="renameButton" onclick="renameFish('+i+')">RENAME</button>'
 		canvas.innerHTML += ' <button class="sellButton" onclick="sellFish('+i+')">SELL</button>'
 		canvas.innerHTML += "\n"
@@ -335,35 +430,68 @@ document.getElementById("fishes").onclick = function(){
 }
 
 function roundCost(item){
-	var n = Math.floor(item.level/50)
-	if (n>4)
-		item.cost = Math.round(item.cost*Math.pow(10,4-n))/Math.pow(10,4-n)
-	else 
-		item.cost = Number(item.cost.toFixed((4-n)+1))
+	var n = Math.floor((countNumber(item.cost)-1)/3)*3
+	item.cost = Math.floor(item.cost/Math.pow(10,n-2))*Math.pow(10,n-2)
 }
 
-function buyItem(i,time){
+function buyItem(i,max=false){
+	//TODO: remove "shop[i]"
+
+	if (max===true && game.points===Infinity) true
+	
 	var cost = shop[i].cost
-	if (cost*time>game.points*time) return
-	for (var _=0;_<time;_++){
+	if (shop[i].cost>game.points) return
+	do{
 		pointSet(game.points-cost)
-		shop[i].cost += shop[i].costInc
 		shop[i].level++
-		if (shop[i].level%10==0)
-			game[shop[i].value] +=  shop[i].valueInc*10
-		else
-			game[shop[i].value] +=  shop[i].valueInc
-			
-		if (shop[i].level%50==0)
-			shop[i].costInc*=10
 		
-		roundCost(shop[i])
-	}
+		if (shop[i].level%25==0){
+			shop[i].costInc*=2.5
+		}
+
+		if (shop[i].valueIncMax===undefined){
+			if (shop[i].level%50==0){
+				shop[i].valueInc*=2
+			} else if (shop[i].level%100==0){
+				shop[i].valueInc*=10
+			}
+		}
+
+		if (shop[i].valueInc===undefined){
+			game[shop[i].value] = shop[i].valueList[shop[i].level-2]
+		}else{
+			if (shop[i].level%10==0){
+				if(shop[i].valueIncMul!==undefined){
+					if (shop[i].valueIncMax>=shop[i].valueInc)
+						shop[i].valueInc *=  shop[i].valueIncMul
+					else
+						shop[i].valueInc =  shop[i].valueIncMax
+				}
+					
+				game[shop[i].value] +=  shop[i].valueInc*10
+			}else{
+				game[shop[i].value] +=  shop[i].valueInc
+			}
+		}
+
+		if(shop[i].costInc===undefined)
+			shop[i].cost *= shop[i].costMul
+		else
+			shop[i].cost += shop[i].costInc
+		cost = shop[i].cost
+	}while(max && (cost<=game.points))
+	roundCost(shop[i])
+	
 	document.getElementById("buy").click()
 }
 
 function stringItem(item){
-	return `$${item.cost} LV ${item.level}`
+	if(item.max)
+		return "LV MAX"
+	else{
+		var cost = item.cost
+		return `${formatMoney(cost)} LV ${item.level}`
+	}
 }
 
 document.getElementById("buy").onclick = function(){
@@ -373,8 +501,19 @@ document.getElementById("buy").onclick = function(){
 		if(item.level===undefined)item.level=1
 		canvas.innerHTML += `${item.name}
   ${stringItem(item)}\n`
-		canvas.innerHTML += '  <button class="buyx1Button" onclick="buyItem('+i+',1)">BUY</button>'
-		canvas.innerHTML += ' <button class="buyx10Button" onclick="buyItem('+i+',10)">BUY 10</button>'
+  
+  	if (item.max===undefined)
+			item.max = false
+		if(item.valueList!==undefined){
+			item.max = (item.level-1===item.valueList.length)
+		}
+
+		var t = ""
+		if (item.max)
+			t = " disabled"
+		
+		canvas.innerHTML += '  <button class="buyButton" onclick="buyItem('+i+')"'+t+'>BUY</button>'
+		canvas.innerHTML += ' <button class="buyButton" onclick="buyItem('+i+',true)"'+t+'>BUY MAX</button>'
 		canvas.innerHTML += "<hr>"
 	})
 }
@@ -385,9 +524,10 @@ document.getElementById("cast").onclick = function(){
 	var c = document.createElement("center")
 	refresh = true
 	c.innerHTML = ''
-	c.innerHTML += "  /`.  \n"
-	c.innerHTML += " /   ' \n"
-	c.innerHTML += "/*    '\n\n"
+	c.innerHTML += "   ,\n"
+	c.innerHTML += "  /|\n"
+	c.innerHTML += " / |\n"
+	c.innerHTML += "/* ¿\n\n"
 	c.innerHTML += `${game.bait} of 20 baits\n`
 	if(game.bait<20) {
 		c.innerHTML += `\nMore bait:\n`
